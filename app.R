@@ -49,10 +49,10 @@ ui <- fluidPage(
   )
 )
 kies_vraag <- function(vertalingen, antwoorden) {
-  if (sum(antwoorden$juist) < 100) {
+  # if (sum(antwoorden$juist) < 100) {
     return(sample_n(vertalingen, 1))
-  }
-  stop("voldoende juiste antwoorden om meer gericht te werken")
+  # }
+  # stop("voldoende juiste antwoorden om meer gericht te werken")
 }
 
 
