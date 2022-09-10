@@ -1,3 +1,5 @@
+renv::consent(TRUE)
+renv::restore(prompt = FALSE)
 library(git2rdata)
 library(tidyverse)
 library(googlesheets4)
@@ -12,8 +14,8 @@ lees_vertalingen <- function(
     mutate(
       hash = pmap_chr(
         list(
-          type = .data$type, werkwoord = .data$werkwoord, persoon = .data$persoon,
-          werkwoordstijd = .data$werkwoordstijd
+          type = .data$type, werkwoord = .data$werkwoord,
+          persoon = .data$persoon, werkwoordstijd = .data$werkwoordstijd
         ),
         function(...) {
           sha1(list(...))
