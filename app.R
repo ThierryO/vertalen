@@ -111,7 +111,7 @@ server <- function(session, input, output) {
     if (is.null(data$hash) || input$antwoord == "") {
       return(NULL)
     }
-    if (input$antwoord == data$correct) {
+    if (str_squish(input$antwoord) == data$correct) {
       data$feedback <- isolate(
           sprintf("Correct! `%s` vertaal je als `%s`", data$vraag, data$correct)
         )
