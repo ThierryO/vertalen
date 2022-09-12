@@ -38,7 +38,10 @@ lees_antwoorden <- function(taal = "nederlands-frans") {
   }
   read_vc(taal)
 }
-selectiekans <- function(vragen, antwoord) {
+selectiekans_bijwerken <- function(vragen, antwoord) {
+  if ((sum(antwoord$juist) < 20) || (sum(1 - antwoord$juist) < 20)) {
+    return(mutate(vragen, voorspelling = 1))
+  }
   vragen %>%
     inner_join(antwoord, by = "hash") %>%
     mutate(fout = 1 - .data$juist) -> dataset
@@ -64,14 +67,7 @@ selectiekans <- function(vragen, antwoord) {
   model <- inla(formule, family = "binomial", data = dataset)
   dataset$voorspelling <- model$summary.fitted.values$mean
   dataset %>%
-    distinct(.data$hash, .data$voorspelling)
-}
-
-kies_vraag <- function(vertalingen, antwoorden) {
-  # if (sum(antwoorden$juist) < 100) {
-  return(sample_n(vertalingen, 1))
-  # }
-  # stop("voldoende juiste antwoorden om meer gericht te werken")
+    distinct(across(unique(c(colnames(vragen), "voorspelling"))))
 }
 
 # Define UI for application that draws a histogram
@@ -93,14 +89,16 @@ server <- function(session, input, output) {
   )
   observeEvent(data$taal, {
     data$antwoorden <- lees_antwoorden(taal = data$taal)
-    data$vertalingen <- lees_vertalingen(taal = data$taal)
+    data$vertalingen <- selectiekans_bijwerken(
+      lees_vertalingen(taal = data$taal), data$antwoorden
+    )
   })
   observeEvent(data$vertalingen, {
     if (is.null(data$vertalingen)) {
       return(NULL)
     }
-    vraag <- kies_vraag(
-      vertalingen = data$vertalingen, antwoorden = data$antwoorden
+    vraag <- slice_sample(
+      data$vertalingen, n = 1, weight_by = .data$voorspelling
     )
     data$hash <- vraag$hash
     data$vraag <- vraag$nederlands
@@ -132,8 +130,8 @@ server <- function(session, input, output) {
     }
     data$antwoorden <- rbind(data$antwoorden, extra)
     write_vc(data$antwoorden, data$taal, sorting = c("hash", "tijdstip"))
-    vraag <- kies_vraag(
-      vertalingen = data$vertalingen, antwoorden = data$antwoorden
+    vraag <- slice_sample(
+      data$vertalingen, n = 1, weight_by = .data$voorspelling
     )
     data$hash <- vraag$hash
     data$vraag <- vraag$nederlands
@@ -148,6 +146,15 @@ server <- function(session, input, output) {
     output$feedback <- renderText({data$feedback})
   })
   observeEvent(data$antwoorden, {
+    if (is.null(data$antwoorden)) {
+      return(NULL)
+    }
+    if (nrow(data$antwoorden) %% 25 == 0) {
+      data$vertalingen <- selectiekans_bijwerken(
+        vragen = data$vertalingen, antwoord = data$antwoorden
+      )
+    }
+
     output$inspanning <- renderPlot(
       data$antwoorden %>%
         filter(
