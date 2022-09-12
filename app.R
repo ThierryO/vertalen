@@ -38,6 +38,41 @@ lees_antwoorden <- function(taal = "nederlands-frans") {
   }
   read_vc(taal)
 }
+selectiekans <- function(vragen, antwoord) {
+  vragen %>%
+    inner_join(antwoord, by = "hash") %>%
+    mutate(fout = 1 - .data$juist) -> dataset
+  formule <- "persoon"
+  if (length(levels(vragen$type)) > 1) {
+    formule <- c(formule, "type")
+  }
+  if (length(levels(vragen$werkwoordstijd)) > 1) {
+    formule <- c(formule, "werkwoordstijd")
+  }
+  if (length(levels(vragen$werkwoord)) > 1) {
+    formule <- c(formule, "werkwoord")
+  }
+  formule <- sprintf(
+    paste(
+      "f(\n  %s, model = 'iid',",
+      "  hyper = list(theta = list(prior = 'pc.prec', param = c(3, 0.01)))\n)",
+      sep = "\n"
+    ),
+    formule
+  )
+  formule <- as.formula(paste("fout ~\n", paste(formule, collapse = " +\n")))
+  model <- inla(formule, family = "binomial", data = dataset)
+  dataset$voorspelling <- model$summary.fitted.values$mean
+  dataset %>%
+    distinct(.data$hash, .data$voorspelling)
+}
+
+kies_vraag <- function(vertalingen, antwoorden) {
+  # if (sum(antwoorden$juist) < 100) {
+  return(sample_n(vertalingen, 1))
+  # }
+  # stop("voldoende juiste antwoorden om meer gericht te werken")
+}
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -49,13 +84,6 @@ ui <- fluidPage(
     plotOutput("inspanning")
   )
 )
-kies_vraag <- function(vertalingen, antwoorden) {
-  # if (sum(antwoorden$juist) < 100) {
-    return(sample_n(vertalingen, 1))
-  # }
-  # stop("voldoende juiste antwoorden om meer gericht te werken")
-}
-
 
 # Define server logic required to draw a histogram
 server <- function(session, input, output) {
