@@ -45,7 +45,8 @@ ui <- fluidPage(
     textOutput("vraag"),
     textInput("antwoord", label = "vertaling"),
     actionButton("controleer", label = "Controleer vertaling"),
-    textOutput("feedback")
+    textOutput("feedback"),
+    plotOutput("inspanning")
   )
 )
 kies_vraag <- function(vertalingen, antwoorden) {
@@ -117,6 +118,24 @@ server <- function(session, input, output) {
       return(NULL)
     }
     output$feedback <- renderText({data$feedback})
+  })
+  observeEvent(data$antwoorden, {
+    output$inspanning <- renderPlot(
+      data$antwoorden %>%
+        filter(
+          difftime(Sys.time(), data$antwoorden$tijdstip, units = "days") <= 28
+        ) %>%
+        mutate(
+          dag = trunc(.data$tijdstip, units = "days") %>%
+            as.Date(),
+          juist = factor(.data$juist, 0:1, c("fout", "juist"))
+        ) %>%
+        ggplot(aes(x = dag, fill = juist)) +
+        geom_bar() +
+        scale_x_date(date_labels = "%d %b") +
+        theme(axis.title = element_blank()) +
+        ggtitle("inspanning van de laatste vier weken")
+    )
   })
 
   session$onSessionEnded(function() {
