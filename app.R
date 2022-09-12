@@ -5,6 +5,7 @@ library(tidyverse)
 library(googlesheets4)
 library(digest)
 library(shiny)
+library(INLA)
 
 lees_vertalingen <- function(
   sheet = "1w85ll_qVEPkybDEPPovji_bmLAS5TXXFNqMRGOY0TTs",
