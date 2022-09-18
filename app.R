@@ -41,16 +41,32 @@ lees_antwoorden <- function(taal = "nederlands-frans") {
 }
 selectiekans_bijwerken <- function(vragen, antwoord) {
   if ((sum(antwoord$juist) < 20) || (sum(1 - antwoord$juist) < 20)) {
-    return(mutate(vragen, voorspelling = 1))
+    vragen %>%
+      left_join(antwoord, by = "hash") %>%
+      group_by(
+        .data$type, .data$werkwoord, .data$persoon, .data$werkwoordstijd,
+        .data$nederlands, .data$vertaling, .data$hash
+      ) %>%
+      summarise(laatste = max(.data$tijdstip), .groups = "drop") %>%
+      mutate(
+        voorspelling = 1,
+        laatste = replace_na(
+          .data$laatste,
+          min(c(.data$laatste, Sys.time()), na.rm = TRUE) - 3600 * 24
+        )
+      ) -> resultaat
+    return(resultaat)
   }
   vragen %>%
-    inner_join(antwoord, by = "hash") %>%
+    left_join(antwoord, by = "hash") %>%
     mutate(fout = 1 - .data$juist) -> dataset
   formule <- "persoon"
   if (length(levels(vragen$type)) > 1) {
+    stop("meer dan een type")
     formule <- c(formule, "type")
   }
   if (length(levels(vragen$werkwoordstijd)) > 1) {
+    stop("meer dan een werkwoordstijd")
     formule <- c(formule, "werkwoordstijd")
   }
   if (length(levels(vragen$werkwoord)) > 1) {
@@ -65,10 +81,26 @@ selectiekans_bijwerken <- function(vragen, antwoord) {
     formule
   )
   formule <- as.formula(paste("fout ~\n", paste(formule, collapse = " +\n")))
-  model <- inla(formule, family = "binomial", data = dataset)
-  dataset$voorspelling <- model$summary.fitted.values$mean
+  model <- inla(
+    formule, family = "binomial", data = dataset,
+    control.predictor = list(link = 1)
+  )
+  dataset$voorspelling <- model$summary.fitted.values$`0.975quant`
   dataset %>%
-    distinct(across(unique(c(colnames(vragen), "voorspelling"))))
+    group_by(
+      .data$type, .data$werkwoord, .data$persoon, .data$werkwoordstijd,
+      .data$nederlands, .data$vertaling, .data$hash
+    ) %>%
+    summarise(
+      laatste = max(.data$tijdstip),
+      voorspelling = max(.data$voorspelling),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      laatste = replace_na(
+        .data$laatste, min(.data$laatste, na.rm = TRUE) - 3600 * 24
+      )
+    )
 }
 
 # Define UI for application that draws a histogram
@@ -98,9 +130,9 @@ server <- function(session, input, output) {
     if (is.null(data$vertalingen)) {
       return(NULL)
     }
-    vraag <- slice_sample(
-      data$vertalingen, n = 1, weight_by = .data$voorspelling
-    )
+    data$vertalingen %>%
+      slice_min(.data$laatste, n = -5) %>%
+      slice_sample(n = 1, weight_by = .data$voorspelling) -> vraag
     data$hash <- vraag$hash
     data$vraag <- vraag$nederlands
     data$correct <- vraag$vertaling
@@ -110,12 +142,14 @@ server <- function(session, input, output) {
     if (is.null(data$hash) || input$antwoord == "") {
       return(NULL)
     }
+    nu <- Sys.time()
+    data$vertalingen$laatste[data$vertalingen$hash == data$hash] <- nu
     if (str_squish(input$antwoord) == data$correct) {
       data$feedback <- isolate(
           sprintf("Correct! `%s` vertaal je als `%s`", data$vraag, data$correct)
         )
       extra <- data.frame(
-        hash = data$hash, tijdstip = Sys.time(), juist = 1L, fout = ""
+        hash = data$hash, tijdstip = nu, juist = 1L, fout = ""
       )
     } else {
       data$feedback <- isolate(
@@ -125,8 +159,7 @@ server <- function(session, input, output) {
         )
       )
       extra <- data.frame(
-        hash = data$hash, tijdstip = Sys.time(), juist = 0L,
-        fout = input$antwoord
+        hash = data$hash, tijdstip = nu, juist = 0L, fout = input$antwoord
       )
     }
     data$antwoorden <- rbind(data$antwoorden, extra)
@@ -150,7 +183,7 @@ server <- function(session, input, output) {
     if (is.null(data$antwoorden)) {
       return(NULL)
     }
-    if (nrow(data$antwoorden) %% 25 == 0) {
+    if (nrow(data$antwoorden) %% 10 == 0) {
       data$vertalingen <- selectiekans_bijwerken(
         vragen = data$vertalingen, antwoord = data$antwoorden
       )
