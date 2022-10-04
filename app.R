@@ -6,6 +6,7 @@ library(googlesheets4)
 library(digest)
 library(shiny)
 library(INLA)
+library(scales)
 
 source("helper.R")
 
@@ -79,8 +80,11 @@ ui <- fluidPage(
     textOutput("vraag"),
     textInput("antwoord", label = "vertaling"),
     actionButton("controleer", label = "Controleer vertaling"),
-    textOutput("feedback"),
-    plotOutput("inspanning")
+    textOutput("feedback")
+  ),
+  fluidRow(
+    column(plotOutput("inspanning"), width = 6),
+    column(plotOutput("inspanning_detail"), width = 6)
   )
 )
 
@@ -174,6 +178,20 @@ server <- function(session, input, output) {
         scale_x_date(date_labels = "%d %b") +
         theme(axis.title = element_blank()) +
         ggtitle("inspanning van de laatste vier weken")
+    )
+
+    output$inspanning_detail <- renderPlot(
+      data$antwoorden %>%
+        inner_join(data$vertalingen, by = "hash") %>%
+        mutate(
+          dag = round.POSIXt(.data$tijdstip, units = "day") %>%
+            as.Date()
+        ) %>%
+        group_by(.data$werkwoord, .data$dag) %>%
+        summarise(aantal = n(), juist = mean(.data$juist), .groups = "drop") %>%
+        ggplot(aes(x = dag, y = juist, size = aantal)) + geom_point() +
+        facet_wrap(~werkwoord) +
+        scale_size_area()
     )
   })
 

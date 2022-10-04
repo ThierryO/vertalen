@@ -12,6 +12,7 @@ library(tidyverse)
 library(digest)
 library(INLA)
 library(DT)
+library(scales)
 source("helper.R")
 ```
 
@@ -147,3 +148,18 @@ model$summary.fitted %>%
   geom_point() +
   coord_flip()
 ```
+
+```{r}
+antwoorden %>%
+  inner_join(vragen, by = "hash") %>%
+  mutate(
+    dag = round.POSIXt(.data$tijdstip, units = "day") %>%
+           as.Date()
+  ) %>%
+  group_by(.data$werkwoord, .data$dag) %>%
+  summarise(aantal = n(), juist = mean(.data$juist), .groups = "drop") %>%
+  ggplot(aes(x = dag, y = juist, size = aantal)) + geom_point() +
+  facet_wrap(~werkwoord) +
+  scale_size_area()
+```
+
