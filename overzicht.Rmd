@@ -1,0 +1,149 @@
+---
+title: "Overzicht vertalingen oefenen"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = FALSE)
+library(git2rdata)
+library(googlesheets4)
+library(tidyverse)
+library(digest)
+library(INLA)
+library(DT)
+source("helper.R")
+```
+
+```{r inlezen, include=FALSE}
+vragen <- lees_vertalingen()
+antwoorden <- lees_antwoorden()
+```
+
+```{r overzicht}
+antwoorden %>%
+  group_by(.data$hash) %>%
+  summarise(
+    aantal = n(), juist = round(mean(.data$juist), 2),
+    laatste = max(.data$tijdstip), .groups = "drop"
+  ) %>%
+  inner_join(vragen, by = "hash") %>%
+  select(
+    .data$werkwoord, .data$persoon, .data$aantal, .data$juist, .data$laatste
+  ) %>%
+  arrange(desc(.data$juist)) %>%
+  datatable()
+```
+
+
+```{r recente-fouten}
+antwoorden %>%
+  filter(.data$juist == 0) %>%
+  slice_max(.data$tijdstip, n = 50) %>%
+  inner_join(vragen, by = "hash") %>%
+  select(.data$nederlands, .data$fout, .data$tijdstip) %>%
+  kable()
+```
+
+```{r model}
+vragen %>%
+  left_join(antwoorden, by = "hash") %>%
+  mutate(
+    fout = 1 - .data$juist
+  ) -> dataset
+formule <- c("persoon", "hash")
+if (length(levels(vragen$type)) > 1) {
+  stop("meer dan een type")
+  formule <- c(formule, "type")
+}
+if (length(levels(vragen$werkwoordstijd)) > 1) {
+  stop("meer dan een werkwoordstijd")
+  formule <- c(formule, "werkwoordstijd")
+}
+if (length(levels(vragen$werkwoord)) > 1) {
+  formule <- c(formule, "werkwoord")
+}
+formule <- sprintf(
+  paste(
+    "f(\n  %s, model = 'iid',",
+    "  hyper = list(theta = list(prior = 'pc.prec', param = c(3, 0.01)))\n)",
+    sep = "\n"
+  ),
+  formule
+)
+formule <- as.formula(paste("fout ~\n", paste(formule, collapse = " +\n")))
+model <- inla(
+  formule, family = "binomial", data = dataset,
+  control.predictor = list(link = 1), control.compute = list(waic = TRUE)
+)
+```
+
+```{r model-persoon, fig.cap = "gemiddeld effect van de persoon"}
+model$summary.random$persoon %>%
+  mutate(ID = reorder(.data$ID, .data$mean)) %>%
+  ggplot(aes(x = ID, y = mean, ymin = `0.025quant`, ymax = `0.975quant`)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_errorbar() +
+  geom_point() +
+  coord_flip()
+```
+
+```{r model-werkwoord, fig.cap = "gemiddelde effect van het werkwoord"}
+model$summary.random$werkwoord %>%
+  mutate(ID = reorder(.data$ID, .data$mean)) %>%
+  ggplot(aes(x = ID, y = mean, ymin = `0.025quant`, ymax = `0.975quant`)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_errorbar() +
+  geom_point() +
+  coord_flip()
+```
+
+```{r model-rest, fig.cap = "restende effect"}
+model$summary.random$hash %>%
+  inner_join(vragen, by = c("ID" = "hash")) %>%
+  slice_max(.data$mean, n = 20) %>%
+  mutate(nederlands = reorder(.data$nederlands, .data$mean)) %>%
+  ggplot(aes(x = nederlands, y = mean, ymin = `0.025quant`, ymax = `0.975quant`)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_errorbar() +
+  geom_point() +
+  coord_flip()
+```
+
+```{r model-fout, fig.cap = "Top 20 vragen met hoogste geschatte kans om fouten te maken."}
+model$summary.fitted %>%
+  bind_cols(dataset) %>%
+  group_by(.data$nederlands) %>%
+  summarise(
+    fout = mean(.data$mean), lcl = mean(.data$`0.025quant`),
+    ucl = mean(.data$`0.975quant`), aantal = n()
+  ) %>%
+  slice_max(.data$fout, n = 20) %>%
+  mutate(nederlands = reorder(.data$nederlands, .data$fout)) %>%
+  ggplot(
+    aes(x = nederlands, y = fout, ymin = lcl, ymax = ucl)
+  ) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_errorbar() +
+  geom_point() +
+  coord_flip()
+```
+
+```{r model-goed, fig.cap = "Top 20 vragen met laagste geschatte kans om fouten te maken."}
+model$summary.fitted %>%
+  bind_cols(dataset) %>%
+  group_by(.data$nederlands) %>%
+  summarise(
+    fout = mean(.data$mean), lcl = mean(.data$`0.025quant`),
+    ucl = mean(.data$`0.975quant`), aantal = n()
+  ) %>%
+  slice_min(.data$fout, n = 20) %>%
+  mutate(nederlands = reorder(.data$nederlands, .data$fout)) %>%
+  ggplot(
+    aes(x = nederlands, y = fout, ymin = lcl, ymax = ucl)
+  ) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_errorbar() +
+  geom_point() +
+  coord_flip()
+```
