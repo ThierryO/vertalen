@@ -157,7 +157,7 @@ server <- function(session, input, output) {
     if (is.null(data$antwoorden)) {
       return(NULL)
     }
-    if (nrow(data$antwoorden) %% 10 == 0) {
+    if (nrow(data$antwoorden) %% 50 == 0) {
       data$vertalingen <- selectiekans_bijwerken(
         vragen = data$vertalingen, antwoord = data$antwoorden
       )
