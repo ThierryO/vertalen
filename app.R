@@ -11,6 +11,8 @@ library(scales)
 source("helper.R")
 
 selectiekans_bijwerken <- function(vragen, antwoord, type = "vervoeging") {
+  antwoord |>
+    semi_join(vragen, by = "hash") -> antwoord
   if ((sum(antwoord$juist) < 20) || (sum(1 - antwoord$juist) < 20)) {
     vragen |>
       left_join(antwoord, by = "hash") -> ds
@@ -26,7 +28,6 @@ selectiekans_bijwerken <- function(vragen, antwoord, type = "vervoeging") {
       ) -> resultaat
     return(resultaat)
   }
-  stop("model")
   vragen |>
     left_join(antwoord, by = "hash") |>
     mutate(fout = 1 - .data$juist) -> dataset
@@ -41,8 +42,9 @@ selectiekans_bijwerken <- function(vragen, antwoord, type = "vervoeging") {
         sep = "\n"
       )
     ) |>
+    c("1") |>
     paste(collapse = " +\n") |>
-    sprintf(fmt = "fout ~\n%s") |>
+    sprintf(fmt = "fout ~ \n%s") |>
     as.formula() -> formule
   model <- inla(
     formule, family = "binomial", data = dataset,
@@ -71,7 +73,8 @@ ui <- fluidPage(
       "taal", label = "Wat oefenen?", selected = "nederlands-frans",
       choices = list(
         "vervoegingen nederlands-frans" = "nederlands-frans",
-        "woorden latijn" = "latijn"
+        "woorden latijn" = "latijn", "woorden frans" = "frans",
+        "woorden engels" = "engels"
       )
     )
   ),
@@ -95,9 +98,9 @@ server <- function(session, input, output) {
   )
   observeEvent(input$taal, {
     data$antwoorden <- lees_antwoorden(taal = input$taal)
-    data$vertalingen <- lees_vertalingen(taal = input$taal) |>
-      selectiekans_bijwerken(data$antwoorden)
     data$type <- ifelse(grepl(".+-.+", input$taal), "vervoeging", "woorden")
+    data$vertalingen <- lees_vertalingen(taal = input$taal) |>
+      selectiekans_bijwerken(data$antwoorden, type = data$type)
   })
   observeEvent(data$vertalingen, {
     if (is.null(data$vertalingen)) {
@@ -187,17 +190,17 @@ server <- function(session, input, output) {
       if (nrow(data$antwoorden) == 0) {
         return(NULL)
       }
-      data$antwoorden |>
-        inner_join(data$vertalingen, by = "hash") |>
-        mutate(
-          dag = round.POSIXt(.data$tijdstip, units = "day") |>
-            as.Date()
-        ) |>
-        group_by(.data$werkwoord, .data$dag) |>
-        summarise(aantal = n(), juist = mean(.data$juist), .groups = "drop") |>
-        ggplot(aes(x = dag, y = juist, size = aantal)) + geom_point() +
-        facet_wrap(~werkwoord) +
-        scale_size_area()
+      # data$antwoorden |>
+      #   inner_join(data$vertalingen, by = "hash") |>
+      #   mutate(
+      #     dag = round.POSIXt(.data$tijdstip, units = "day") |>
+      #       as.Date()
+      #   ) |>
+      #   group_by(.data$werkwoord, .data$dag) |>
+      #   summarise(aantal = n(), juist = mean(.data$juist), .groups = "drop") |>
+      #   ggplot(aes(x = dag, y = juist, size = aantal)) + geom_point() +
+      #   facet_wrap(~werkwoord) +
+      #   scale_size_area()
     })
   })
 

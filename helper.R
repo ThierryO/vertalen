@@ -28,9 +28,9 @@ lees_vertalingen <- function(
           list(type = .data$type, woord = .data$woord, kenmerk = .data$kenmerk),
           ~sha1(list(...))
         ),
-        .data$type, .data$kenmerk,
+        type = factor(.data$type), kenmerk = factor(.data$kenmerk),
         vraag = sprintf(
-          "Geef %s van `%s`", .data$woord, .data$kenmerk
+          "Geef `%s` van `%s`", .data$kenmerk, .data$woord
         ),
         antwoord = .data$waarde
       )
