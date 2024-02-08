@@ -73,6 +73,7 @@ ui <- fluidPage(
       "taal", label = "Wat oefenen?", selected = "nederlands-frans",
       choices = list(
         "vervoegingen nederlands-frans" = "nederlands-frans",
+        "vervoegingen nederlands-latijn" = "nederlands-latijn",
         "woorden latijn" = "latijn", "woorden frans" = "frans",
         "woorden engels" = "engels"
       )
