@@ -76,7 +76,8 @@ ui <- fluidPage(
         "vervoegingen nederlands-latijn" = "nederlands-latijn",
         "woorden latijn" = "latijn", "woorden frans" = "frans",
         "woorden engels" = "engels", "woorden grieks" = "grieks",
-        "nederlandse werkwoorden" = "nederlands"
+        "nederlandse werkwoorden" = "nederlands",
+        "chemische elementen" = "chemische elementen"
       )
     )
   ),
